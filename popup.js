@@ -5,10 +5,16 @@ const CONFIG = {
   selectors: {
     input: '#urlInput',
     button: '#loadBtn',
-    content: '#content'
+    content: '#content',
+    themeToggle: '#themeToggle',
+    metadata: '#metadata',
+    prevBtn: '#prevBtn',
+    nextBtn: '#nextBtn'
   },
   storageKeyUrl: 'ao3_last_url',
   storageKeyHtml: 'ao3_last_html',
+  storageKeyTheme: 'ao3_theme',
+  storageKeyScroll: 'ao3_scroll_pos',
   domain: 'archiveofourown.org'
 };
 
@@ -20,10 +26,34 @@ class UIManager {
     this.input = document.querySelector(CONFIG.selectors.input);
     this.button = document.querySelector(CONFIG.selectors.button);
     this.content = document.querySelector(CONFIG.selectors.content);
+    this.themeToggle = document.querySelector(CONFIG.selectors.themeToggle);
+    this.metadata = document.querySelector(CONFIG.selectors.metadata);
+    this.prevBtn = document.querySelector(CONFIG.selectors.prevBtn);
+    this.nextBtn = document.querySelector(CONFIG.selectors.nextBtn);
+    
+    this.initTheme();
+  }
+
+  initTheme() {
+    // Restaurer le thème depuis le storage de l'extension
+    chrome.storage.local.get([CONFIG.storageKeyTheme], (result) => {
+      if (result[CONFIG.storageKeyTheme] === 'dark') {
+        document.body.classList.add('dark-theme');
+      }
+    });
+
+    this.themeToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark-theme');
+      const isDark = document.body.classList.contains('dark-theme');
+      chrome.storage.local.set({ [CONFIG.storageKeyTheme]: isDark ? 'dark' : 'light' });
+    });
   }
 
   showLoading() {
     this.content.innerHTML = '<p class="status-msg">⏳ Chargement de l\'histoire en cours...</p>';
+    this.metadata.innerHTML = '';
+    this.prevBtn.style.display = 'none';
+    this.nextBtn.style.display = 'none';
     this.button.disabled = true;
   }
 
@@ -32,10 +62,23 @@ class UIManager {
     this.button.disabled = false;
   }
 
-  displayContent(htmlString) {
-    // L'utilisation de innerHTML est ici protégée par la CSP restrictive du Manifest V3 
-    // et le fait qu'AO3 filtre déjà très strictement le HTML des auteurs.
-    this.content.innerHTML = htmlString;
+  displayContent(data) {
+    // Supporte l'ancien format (string) et le nouveau (objet JSON avec les stats et liens)
+    const htmlContent = typeof data === 'string' ? data : data.html;
+    this.content.innerHTML = htmlContent;
+
+    if (typeof data === 'object') {
+      if (data.stats) {
+        this.metadata.innerHTML = data.stats;
+      }
+      
+      this.prevBtn.style.display = data.prevUrl ? 'block' : 'none';
+      this.prevBtn.dataset.url = data.prevUrl || '';
+
+      this.nextBtn.style.display = data.nextUrl ? 'block' : 'none';
+      this.nextBtn.dataset.url = data.nextUrl || '';
+    }
+
     this.button.disabled = false;
   }
 
@@ -118,39 +161,50 @@ class AO3Service {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, 'text/html');
 
-    // 1. Vérification des cas bloquants / Captchas intraitables
-    if (doc.body && doc.body.textContent.includes('only available to registered users')) {
-      throw new Error(`Cette fiction est restreinte. Vous devez d'abord vous connecter à AO3 sur votre navigateur Chrome, puis réessayer.`);
+    // Récupérations des Stats (si présentes)
+    const stats = [];
+    
+    // Chapitre actuel
+    const selectedOption = doc.querySelector('#selected_id option[selected="selected"]');
+    if (selectedOption) {
+      stats.push(`${selectedOption.textContent}`);
+    } else {
+      const workTitle = doc.querySelector('h2.title');
+      if (workTitle) stats.push(`${workTitle.textContent.trim()}`);
     }
 
-    if (doc.body && doc.body.textContent.includes('This work could have adult content') && !doc.querySelector('#workskin')) {
-      throw new Error(`Le système de bypass adulte a échoué. Essaye d'ouvrir la page, de cliquer sur 'Proceed', puis de réessayer.`);
-    }
+    const words = doc.querySelector('dd.words');
+    const chapters = doc.querySelector('dd.chapters');
+    const kudos = doc.querySelector('dd.kudos');
+    if (chapters) stats.push(`Ch: ${chapters.textContent}`);
+    if (words) stats.push(`Mots: ${words.textContent}`);
+    if (kudos) stats.push(`Kudos: ${kudos.textContent}`);
 
-    if (doc.title.includes('Just a moment...') || (doc.body && doc.body.textContent.includes('Cloudflare'))) {
-       throw new Error(`Archive of Our Own a bloqué la requête via Cloudflare (protection anti-bot). Essaye de naviguer un peu sur AO3 dans un autre onglet puis réessaye.`);
-    }
+    // Récupération des liens de chapitre
+    const nextBtn = doc.querySelector('.chapter.next a');
+    const prevBtn = doc.querySelector('.chapter.previous a');
+    const nextUrl = nextBtn ? "https://archiveofourown.org" + nextBtn.getAttribute('href') : null;
+    const prevUrl = prevBtn ? "https://archiveofourown.org" + prevBtn.getAttribute('href') : null;
 
-    // Si on a un 404
-    if (doc.title.includes('Error 404')) {
-      throw new Error(`L'histoire n'existe pas ou a été supprimée (Erreur 404).`);
-    }
-
-    // 2. Extraction du conteneur de l'histoire
-    // #workskin est le conteneur principal utilisé par AO3 pour englober la fiction.
-    const storyContainer = doc.querySelector('#workskin');
+    // Extraction de l'histoire (#chapters en prio pour éviter le résumé global qui a aussi la classe .userstuff)
+    const storyContainer = doc.querySelector('#chapters') || doc.querySelector('#workskin') || doc.querySelector('.userstuff');
     
     if (!storyContainer) {
-      console.error("[Stealth Reader] Contenu de la page reçue (extrait):", htmlText.substring(0, 500));
-      throw new Error("Structure AO3 non reconnue ou page introuvable.");
+      console.error("[Stealth Reader] HTML reçu:", htmlText.substring(0, 300));
+      throw new Error("Impossible d'isoler le contenu de l'histoire. URL invalide, bloquée par AO3 ou erreur inattendue.");
     }
 
-    // 3. Amélioration de l'affichage / Discrétion
-    // On peut retirer certains éléments pour rendre la lecture plus neutre et "stealth".
-    const elementsToRemove = storyContainer.querySelectorAll('h3.landmark, .chapter.preface');
+    // Amélioration de l'affichage / Discrétion
+    // On garde la classe .chapter.preface car elle contient souvent le titre et les notes du chapitre.
+    const elementsToRemove = storyContainer.querySelectorAll('.landmark');
     elementsToRemove.forEach(el => el.remove());
 
-    return storyContainer.innerHTML;
+    return {
+      html: storyContainer.innerHTML,
+      stats: stats.join(' | '),
+      nextUrl: nextUrl,
+      prevUrl: prevUrl
+    };
   }
 }
 
@@ -160,8 +214,8 @@ class AO3Service {
 document.addEventListener('DOMContentLoaded', () => {
   const ui = new UIManager();
 
-  // Restauration de la dernière URL et du dernier contenu
-  chrome.storage.local.get([CONFIG.storageKeyUrl, CONFIG.storageKeyHtml], (result) => {
+  // Restauration de la dernière URL, du contenu et du scroll
+  chrome.storage.local.get([CONFIG.storageKeyUrl, CONFIG.storageKeyHtml, CONFIG.storageKeyScroll], (result) => {
     if (result[CONFIG.storageKeyUrl]) {
       ui.inputValue = result[CONFIG.storageKeyUrl];
     }
@@ -169,6 +223,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Si on a du contenu en cache, on l'affiche directement sans re-fetch
     if (result[CONFIG.storageKeyHtml]) {
       ui.displayContent(result[CONFIG.storageKeyHtml]);
+
+      // Repositionner le scroll une fois le HTML injecté dans le DOM
+      if (result[CONFIG.storageKeyScroll]) {
+        setTimeout(() => {
+          const pos = result[CONFIG.storageKeyScroll];
+          window.scrollTo(0, pos);
+          document.body.scrollTop = pos;
+          document.documentElement.scrollTop = pos;
+        }, 100);
+      }
     }
   });
 
@@ -180,13 +244,19 @@ document.addEventListener('DOMContentLoaded', () => {
     ui.showLoading();
 
     try {
-      const storyHTML = await AO3Service.fetchStory(url);
-      ui.displayContent(storyHTML);
+      const storyData = await AO3Service.fetchStory(url);
+      ui.displayContent(storyData);
       
-      // On sauvegarde l'URL ET le contenu HTML extrait pour la prochaine ouverture
+      // Remise à zéro tout en haut
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      
+      // On sauvegarde l'URL, le contenu HTML et on reset le scroll
       chrome.storage.local.set({ 
         [CONFIG.storageKeyUrl]: url,
-        [CONFIG.storageKeyHtml]: storyHTML
+        [CONFIG.storageKeyHtml]: storyData,
+        [CONFIG.storageKeyScroll]: 0
       });
 
     } catch (error) {
@@ -194,4 +264,25 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.showError(error.message);
     }
   });
+
+  // Gestion des clics sur Chapitre Suivant / Précédent
+  const navigateTo = (url) => {
+    if (url) {
+      ui.inputValue = url;
+      document.getElementById('loadBtn').click(); // Simule un chargement auto
+    }
+  };
+
+  document.getElementById('prevBtn').addEventListener('click', function() { navigateTo(this.dataset.url); });
+  document.getElementById('nextBtn').addEventListener('click', function() { navigateTo(this.dataset.url); });
+
+  // Sauvegarde automatique et fluide du défilement
+  let scrollTimeout;
+  document.addEventListener('scroll', () => {
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      const currentScroll = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      chrome.storage.local.set({ [CONFIG.storageKeyScroll]: currentScroll });
+    }, 200);
+  }, true); // "true" permet de capturer l'événement même si l'overflow est sur le body
 });

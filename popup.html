@@ -11,11 +11,18 @@
   <div id="controls">
     <input type="text" id="urlInput" placeholder="URL AO3...">
     <button id="loadBtn">Charger</button>
+    <button id="themeToggle" title="Mode clair / sombre">🌓</button>
   </div>
-  <p style="font-size: 10px; color: #888; margin-top: -10px; margin-bottom: 10px; line-height: 1.2;">
-    ⚠️ Info : Vos cookies de session AO3 sont utilisés localement pour lire les fictions restreintes.
-  </p>
+  <div id="metadata" class="meta-info"></div>
+  <div id="chapterNavTop" class="chapter-nav">
+    <button id="prevBtnTop" style="display: none;">← Chapitre Précédent</button>
+    <button id="nextBtnTop" style="display: none;">Chapitre Suivant →</button>
+  </div>
   <div id="content"></div>
+  <div id="chapterNavBottom" class="chapter-nav">
+    <button id="prevBtnBottom" style="display: none;">← Chapitre Précédent</button>
+    <button id="nextBtnBottom" style="display: none;">Chapitre Suivant →</button>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

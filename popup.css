@@ -1,22 +1,50 @@
+:root {
+  --bg-color: #fcfcfc;
+  --text-color: #333;
+  --input-bg: white;
+  --btn-bg: #eee;
+  --btn-hover: #ddd;
+  --border-color: #ccc;
+  --status-color: #666;
+  --error-bg: #ffebee;
+  --error-border: #ffcdd2;
+  --error-text: #d32f2f;
+}
+
+body.dark-theme {
+  --bg-color: #1e1e1e;
+  --text-color: #dbdbdb;
+  --input-bg: #2d2d2d;
+  --btn-bg: #333333;
+  --btn-hover: #444444;
+  --border-color: #555;
+  --status-color: #aaa;
+  --error-bg: #4a1919;
+  --error-border: #7a1f1f;
+  --error-text: #ff8a80;
+}
+
 body {
-  width: 300px;
-  max-width: 300px;
-  height: 250px;
-  max-height: 250px;
+  /* On autorise une extension de la popup avec min/max, max size dans Chrome Extensions c'est ~800x600 */
+  min-width: 400px;
+  width: 100%;
+  max-width: 800px;
+  min-height: 400px;
+  height: 100vh;
+  max-height: 600px;
   margin: 0;
   padding: 10px;
+  box-sizing: border-box;
   font-family: 'Courier New', Courier, monospace; /* Style Terminal/Bloc-notes */
-  background-color: #fcfcfc;
-  color: #333;
+  background-color: var(--bg-color);
+  color: var(--text-color);
   overflow-y: auto;
-  /* chrome ne permet pas le redimensionnement manuel propre des popups
-     Mais on peut le faire grandir un peu si on joue sur les dimensions dynamiques */
 }
 
 #controls {
   display: flex;
   margin-bottom: 15px;
-  border-bottom: 1px dashed #ccc;
+  border-bottom: 1px dashed var(--border-color);
   padding-bottom: 10px;
 }
 
@@ -24,21 +52,23 @@ body {
   flex-grow: 1;
   padding: 5px;
   font-family: inherit;
-  border: 1px solid #ccc;
-  background: white;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-color);
 }
 
-#loadBtn {
+#loadBtn, #themeToggle {
   padding: 5px 10px;
   margin-left: 5px;
   font-family: inherit;
-  background: #eee;
-  border: 1px solid #ccc;
+  background: var(--btn-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
   cursor: pointer;
 }
 
-#loadBtn:hover {
-  background: #ddd;
+#loadBtn:hover, #themeToggle:hover {
+  background: var(--btn-hover);
 }
 
 #content {
@@ -55,16 +85,46 @@ body {
 }
 
 .status-msg {
-  color: #666;
+  color: var(--status-color);
   font-style: italic;
   text-align: center;
   margin-top: 20px;
 }
 
 .error-msg {
-  color: #d32f2f;
-  background-color: #ffebee;
-  border: 1px solid #ffcdd2;
+  color: var(--error-text);
+  background-color: var(--error-bg);
+  border: 1px solid var(--error-border);
   padding: 10px;
   border-radius: 4px;
+}
+
+.meta-info {
+  font-size: 11px;
+  color: var(--status-color);
+  border-bottom: 1px dotted var(--border-color);
+  margin-bottom: 10px;
+  padding-bottom: 5px;
+  text-align: center;
+}
+
+#chapterNav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 15px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color);
+}
+
+#prevBtn, #nextBtn {
+  padding: 5px 10px;
+  font-family: inherit;
+  background: var(--btn-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+#prevBtn:hover, #nextBtn:hover {
+  background: var(--btn-hover);
 }
