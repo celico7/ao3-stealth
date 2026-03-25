@@ -72,7 +72,16 @@ class UIManager {
 
   displayContent(data) {
     // Supporte l'ancien format (string) et le nouveau (objet JSON avec les stats et liens)
-    const htmlContent = typeof data === 'string' ? data : data.html;
+    let htmlContent = typeof data === 'string' ? data : data.html;
+    
+    // Nettoyage de sécurité strict AVANT insertion (protège contre un vieux cache corrompu)
+    // On retire tout ce qui pourrait faire un appel réseau externe via HTML.
+    htmlContent = htmlContent
+      .replace(/<script\b[^>]*>([\s\S]*?<\/script>)?/gi, '')
+      .replace(/<link\b[^>]*>/gi, '')
+      .replace(/<style\b[^>]*>([\s\S]*?<\/style>)?/gi, '')
+      .replace(/<iframe\b[^>]*>([\s\S]*?<\/iframe>)?/gi, '');
+
     this.content.innerHTML = htmlContent;
 
     if (typeof data === 'object') {
@@ -181,20 +190,18 @@ class AO3Service {
    * Isole le texte de la fiction depuis la structure HTML.
    */
   static parseHTML(htmlText) {
-    // Nettoyage agressif direct sur la chaîne STRING de caractères avant l'analyse DOMParser
-    // On transforme formellement les balises à risque en balises inoffensives (template, meta) 
-    // pour tromper le scanner spéculatif de Chrome de la manière la plus sûre possible.
-    const safeHtmlText = htmlText
-      .replace(/<script/gi, '<template')   // Transforme en <template> (ne télécharge pas de src, cache le contenu textuel)
-      .replace(/<\/script/gi, '</template')
-      .replace(/<style/gi, '<template')    
-      .replace(/<\/style/gi, '</template')
-      .replace(/<link/gi, '<meta')         // <link> devient <meta> (balise orpheline inoffensive)
-      .replace(/<iframe/gi, '<template')
-      .replace(/<\/iframe/gi, '</template');
+    // Suppression RADICALE dans la string AVANT tout parsing :
+    // On détruit tout le bloc <head> et tout bloc <script> pour ne laisser aucune chance
+    // à un pré-parseur de déclencher des appels sortants (et donc des erreurs CSP).
+    const cleanHtml = htmlText
+      .replace(/<head[\s\S]*?<\/head>/gi, '<head></head>') // Détruit le contenu du Head
+      .replace(/<script\b[^>]*>([\s\S]*?<\/script>)?/gi, '') // Détruit tous les scripts y compris auto-fermants
+      .replace(/<link\b[^>]*>/gi, '')                     // Détruit les liens résiduels
+      .replace(/<style\b[^>]*>([\s\S]*?<\/style>)?/gi, '') // Détruit les styles résiduels
+      .replace(/<iframe\b[^>]*>([\s\S]*?<\/iframe>)?/gi, ''); // Détruit les iframes
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(safeHtmlText, 'text/html');
+    const doc = document.implementation.createHTMLDocument('');
+    doc.documentElement.innerHTML = cleanHtml;
 
     // Récupérations des Stats (si présentes)
     const stats = [];
@@ -257,18 +264,29 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.inputValue = result[CONFIG.storageKeyUrl];
     }
     
-    // Si on a du contenu en cache, on l'affiche directement sans re-fetch
+    // Si on a du contenu en cache, on gère les vieux caches corrompus
     if (result[CONFIG.storageKeyHtml]) {
-      ui.displayContent(result[CONFIG.storageKeyHtml]);
+      const cacheHtmlString = typeof result[CONFIG.storageKeyHtml] === 'string' 
+        ? result[CONFIG.storageKeyHtml] 
+        : (result[CONFIG.storageKeyHtml].html || '');
+      
+      // Si on détecte des vieux scripts dans le cache (erreur CSP), on l'invalide et on le vide
+      if (cacheHtmlString.includes('<script') || cacheHtmlString.includes('livevalidation')) {
+        console.warn("[Stealth] Cache corrompu détecté, purge du cache local !");
+        chrome.storage.local.remove([CONFIG.storageKeyHtml, CONFIG.storageKeyScroll]);
+        // Ne pas afficher pour forcer l'utilisateur à re-cliquer sur "Charger"
+      } else {
+        ui.displayContent(result[CONFIG.storageKeyHtml]);
 
-      // Repositionner le scroll une fois le HTML injecté dans le DOM
-      if (result[CONFIG.storageKeyScroll]) {
-        setTimeout(() => {
-          const pos = result[CONFIG.storageKeyScroll];
-          window.scrollTo(0, pos);
-          document.body.scrollTop = pos;
-          document.documentElement.scrollTop = pos;
-        }, 100);
+        // Repositionner le scroll une fois le HTML injecté dans le DOM
+        if (result[CONFIG.storageKeyScroll]) {
+          setTimeout(() => {
+            const pos = result[CONFIG.storageKeyScroll];
+            window.scrollTo(0, pos);
+            document.body.scrollTop = pos;
+            document.documentElement.scrollTop = pos;
+          }, 100);
+        }
       }
     }
   });
