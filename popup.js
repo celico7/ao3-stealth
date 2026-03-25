@@ -182,11 +182,16 @@ class AO3Service {
    */
   static parseHTML(htmlText) {
     // Nettoyage agressif direct sur la chaîne STRING de caractères avant l'analyse DOMParser
-    // Cela empêche Chrome d'intercepter des balises preloads (ex: <link rel="preload">) et de déclencher des requêtes
+    // On transforme formellement les balises à risque en balises inoffensives (template, meta) 
+    // pour tromper le scanner spéculatif de Chrome de la manière la plus sûre possible.
     const safeHtmlText = htmlText
-      .replace(/<link\b[^>]*>/gi, '') // Supprime les liens (stylesheets, preloads)
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '') // Supprime les scripts
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ''); // Supprime les styles
+      .replace(/<script/gi, '<template')   // Transforme en <template> (ne télécharge pas de src, cache le contenu textuel)
+      .replace(/<\/script/gi, '</template')
+      .replace(/<style/gi, '<template')    
+      .replace(/<\/style/gi, '</template')
+      .replace(/<link/gi, '<meta')         // <link> devient <meta> (balise orpheline inoffensive)
+      .replace(/<iframe/gi, '<template')
+      .replace(/<\/iframe/gi, '</template');
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(safeHtmlText, 'text/html');
