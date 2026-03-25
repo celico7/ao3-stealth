@@ -7,7 +7,8 @@ const CONFIG = {
     button: '#loadBtn',
     content: '#content'
   },
-  storageKey: 'ao3_last_url',
+  storageKeyUrl: 'ao3_last_url',
+  storageKeyHtml: 'ao3_last_html',
   domain: 'archiveofourown.org'
 };
 
@@ -47,6 +48,7 @@ class UIManager {
   }
 }
 
+
 // ==========================================
 // SERVICES API (Accès et Parsing AO3)
 // ==========================================
@@ -83,11 +85,22 @@ class AO3Service {
 
     const fetchedUrl = this.prepareURL(rawUrl);
 
-    // L'ajout de credentials: 'include' permet d'utiliser les cookies du navigateur.
-    // C'est vital pour les fictions restreintes (accessibles uniquement aux utilisateurs connectés).
+    // 1. Récupération explicite des cookies de session AO3 de l'utilisateur
+    // Contourne les blocages de sécurité "SameSite" et "Cross-Origin" de Chrome 
+    // qui empêchent souvent `credentials: 'include'` de fonctionner correctement en Manifest V3.
+    const cookieString = await new Promise((resolve) => {
+      chrome.cookies.getAll({ domain: CONFIG.domain }, (cookies) => {
+        resolve(cookies.map(c => `${c.name}=${c.value}`).join('; '));
+      });
+    });
+
+    // 2. Fetch de la page en injectant les cookies en dur dans les en-têtes
     const response = await fetch(fetchedUrl, {
       method: 'GET',
-      credentials: 'include'
+      headers: {
+        'Cookie': cookieString, // Injection manuelle
+        'User-Agent': navigator.userAgent // Garder un footprint naturel
+      }
     });
 
     if (!response.ok) {
@@ -105,13 +118,22 @@ class AO3Service {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, 'text/html');
 
-    // 1. Vérification des cas bloquants connus d'AO3
-    if (doc.querySelector('body').textContent.includes('only available to registered users')) {
+    // 1. Vérification des cas bloquants / Captchas intraitables
+    if (doc.body && doc.body.textContent.includes('only available to registered users')) {
       throw new Error(`Cette fiction est restreinte. Vous devez d'abord vous connecter à AO3 sur votre navigateur Chrome, puis réessayer.`);
     }
 
-    if (doc.querySelector('body').textContent.includes('This work could have adult content') && !doc.querySelector('#workskin')) {
-      throw new Error(`Le système de bypass adulte a échoué. Essayez d'ouvrir la page, de cliquer sur 'Proceed', puis de réessayer.`);
+    if (doc.body && doc.body.textContent.includes('This work could have adult content') && !doc.querySelector('#workskin')) {
+      throw new Error(`Le système de bypass adulte a échoué. Essaye d'ouvrir la page, de cliquer sur 'Proceed', puis de réessayer.`);
+    }
+
+    if (doc.title.includes('Just a moment...') || (doc.body && doc.body.textContent.includes('Cloudflare'))) {
+       throw new Error(`Archive of Our Own a bloqué la requête via Cloudflare (protection anti-bot). Essaye de naviguer un peu sur AO3 dans un autre onglet puis réessaye.`);
+    }
+
+    // Si on a un 404
+    if (doc.title.includes('Error 404')) {
+      throw new Error(`L'histoire n'existe pas ou a été supprimée (Erreur 404).`);
     }
 
     // 2. Extraction du conteneur de l'histoire
@@ -119,6 +141,7 @@ class AO3Service {
     const storyContainer = doc.querySelector('#workskin');
     
     if (!storyContainer) {
+      console.error("[Stealth Reader] Contenu de la page reçue (extrait):", htmlText.substring(0, 500));
       throw new Error("Structure AO3 non reconnue ou page introuvable.");
     }
 
@@ -137,24 +160,35 @@ class AO3Service {
 document.addEventListener('DOMContentLoaded', () => {
   const ui = new UIManager();
 
-  // Restauration de la dernière URL
-  chrome.storage.local.get([CONFIG.storageKey], (result) => {
-    if (result[CONFIG.storageKey]) {
-      ui.inputValue = result[CONFIG.storageKey];
+  // Restauration de la dernière URL et du dernier contenu
+  chrome.storage.local.get([CONFIG.storageKeyUrl, CONFIG.storageKeyHtml], (result) => {
+    if (result[CONFIG.storageKeyUrl]) {
+      ui.inputValue = result[CONFIG.storageKeyUrl];
+    }
+    
+    // Si on a du contenu en cache, on l'affiche directement sans re-fetch
+    if (result[CONFIG.storageKeyHtml]) {
+      ui.displayContent(result[CONFIG.storageKeyHtml]);
     }
   });
 
-  // Action de chargement
+  // Action de chargement (Fetch frais)
   document.getElementById('loadBtn').addEventListener('click', async () => {
     const url = ui.inputValue;
     if (!url) return;
 
     ui.showLoading();
-    chrome.storage.local.set({ [CONFIG.storageKey]: url });
 
     try {
       const storyHTML = await AO3Service.fetchStory(url);
       ui.displayContent(storyHTML);
+      
+      // On sauvegarde l'URL ET le contenu HTML extrait pour la prochaine ouverture
+      chrome.storage.local.set({ 
+        [CONFIG.storageKeyUrl]: url,
+        [CONFIG.storageKeyHtml]: storyHTML
+      });
+
     } catch (error) {
       console.error("[Stealth Reader] Erreur:", error);
       ui.showError(error.message);
