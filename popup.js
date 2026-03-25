@@ -270,11 +270,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ? result[CONFIG.storageKeyHtml] 
         : (result[CONFIG.storageKeyHtml].html || '');
       
-      // Si on détecte des vieux scripts dans le cache (erreur CSP), on l'invalide et on le vide
-      if (cacheHtmlString.includes('<script') || cacheHtmlString.includes('livevalidation')) {
-        console.warn("[Stealth] Cache corrompu détecté, purge du cache local !");
+      // Si on détecte des vieux scripts jquery, livevalidation, etc. dans le cache 
+      // (qui causent les erreurs CSP en cascade), on purge purement et simplement tout l'historique
+      if (/<script/i.test(cacheHtmlString) || cacheHtmlString.includes('jquery') || cacheHtmlString.includes('livevalidation')) {
+        console.warn("[Stealth] Cache corrompu détecté, purge forcée du cache local !");
         chrome.storage.local.remove([CONFIG.storageKeyHtml, CONFIG.storageKeyScroll]);
-        // Ne pas afficher pour forcer l'utilisateur à re-cliquer sur "Charger"
+        return; // On annule l'affichage pour forcer l'utilisateur à re-cliquer sur "Charger"
       } else {
         ui.displayContent(result[CONFIG.storageKeyHtml]);
 
