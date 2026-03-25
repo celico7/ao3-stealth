@@ -24,6 +24,11 @@ body.dark-theme {
   --error-text: #ff8a80;
 }
 
+html {
+  overflow-y: scroll !important; /* Force l'affichage de la scrollbar principale au niveau de HTML */
+  height: 100%;
+}
+
 body {
   /* On autorise une extension de la popup avec min/max, max size dans Chrome Extensions c'est ~800x600 */
   min-width: 400px;
@@ -35,10 +40,10 @@ body {
   margin: 0;
   padding: 10px;
   box-sizing: border-box;
-  font-family: 'Courier New', Courier, monospace; /* Style Terminal/Bloc-notes */
+  font-family: 'Roboto', sans-serif, monospace;
   background-color: var(--bg-color);
   color: var(--text-color);
-  overflow-y: auto;
+  overflow-y: scroll; /* Force l'affichage permanent pour éviter qu'elle saute au chargement */
 }
 
 #controls {
@@ -108,15 +113,20 @@ body {
   text-align: center;
 }
 
-#chapterNav {
+.chapter-nav {
   display: flex;
   justify-content: space-between;
+  margin: 10px 0;
+  padding: 5px 0;
+}
+
+#chapterNavBottom {
   margin-top: 15px;
   padding-top: 10px;
   border-top: 1px dashed var(--border-color);
 }
 
-#prevBtn, #nextBtn {
+.chapter-nav button {
   padding: 5px 10px;
   font-family: inherit;
   background: var(--btn-bg);
@@ -125,6 +135,11 @@ body {
   cursor: pointer;
 }
 
-#prevBtn:hover, #nextBtn:hover {
+.chapter-nav button:hover {
   background: var(--btn-hover);
+}
+
+a {
+  color: var(--text-color);
+  text-decoration: underline;
 }

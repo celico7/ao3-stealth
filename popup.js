@@ -8,8 +8,10 @@ const CONFIG = {
     content: '#content',
     themeToggle: '#themeToggle',
     metadata: '#metadata',
-    prevBtn: '#prevBtn',
-    nextBtn: '#nextBtn'
+    prevBtnTop: '#prevBtnTop',
+    nextBtnTop: '#nextBtnTop',
+    prevBtnBottom: '#prevBtnBottom',
+    nextBtnBottom: '#nextBtnBottom'
   },
   storageKeyUrl: 'ao3_last_url',
   storageKeyHtml: 'ao3_last_html',
@@ -28,8 +30,10 @@ class UIManager {
     this.content = document.querySelector(CONFIG.selectors.content);
     this.themeToggle = document.querySelector(CONFIG.selectors.themeToggle);
     this.metadata = document.querySelector(CONFIG.selectors.metadata);
-    this.prevBtn = document.querySelector(CONFIG.selectors.prevBtn);
-    this.nextBtn = document.querySelector(CONFIG.selectors.nextBtn);
+    this.prevBtnTop = document.querySelector(CONFIG.selectors.prevBtnTop);
+    this.nextBtnTop = document.querySelector(CONFIG.selectors.nextBtnTop);
+    this.prevBtnBottom = document.querySelector(CONFIG.selectors.prevBtnBottom);
+    this.nextBtnBottom = document.querySelector(CONFIG.selectors.nextBtnBottom);
     
     this.initTheme();
   }
@@ -52,8 +56,12 @@ class UIManager {
   showLoading() {
     this.content.innerHTML = '<p class="status-msg">⏳ Chargement de l\'histoire en cours...</p>';
     this.metadata.innerHTML = '';
-    this.prevBtn.style.display = 'none';
-    this.nextBtn.style.display = 'none';
+    
+    if (this.prevBtnTop) this.prevBtnTop.style.display = 'none';
+    if (this.nextBtnTop) this.nextBtnTop.style.display = 'none';
+    if (this.prevBtnBottom) this.prevBtnBottom.style.display = 'none';
+    if (this.nextBtnBottom) this.nextBtnBottom.style.display = 'none';
+    
     this.button.disabled = true;
   }
 
@@ -72,11 +80,26 @@ class UIManager {
         this.metadata.innerHTML = data.stats;
       }
       
-      this.prevBtn.style.display = data.prevUrl ? 'block' : 'none';
-      this.prevBtn.dataset.url = data.prevUrl || '';
+      const showPrev = data.prevUrl ? 'block' : 'none';
+      const showNext = data.nextUrl ? 'block' : 'none';
 
-      this.nextBtn.style.display = data.nextUrl ? 'block' : 'none';
-      this.nextBtn.dataset.url = data.nextUrl || '';
+      if (this.prevBtnTop) {
+        this.prevBtnTop.style.display = showPrev;
+        this.prevBtnTop.dataset.url = data.prevUrl || '';
+      }
+      if (this.prevBtnBottom) {
+        this.prevBtnBottom.style.display = showPrev;
+        this.prevBtnBottom.dataset.url = data.prevUrl || '';
+      }
+
+      if (this.nextBtnTop) {
+        this.nextBtnTop.style.display = showNext;
+        this.nextBtnTop.dataset.url = data.nextUrl || '';
+      }
+      if (this.nextBtnBottom) {
+        this.nextBtnBottom.style.display = showNext;
+        this.nextBtnBottom.dataset.url = data.nextUrl || '';
+      }
     }
 
     this.button.disabled = false;
@@ -158,8 +181,15 @@ class AO3Service {
    * Isole le texte de la fiction depuis la structure HTML.
    */
   static parseHTML(htmlText) {
+    // Nettoyage agressif direct sur la chaîne STRING de caractères avant l'analyse DOMParser
+    // Cela empêche Chrome d'intercepter des balises preloads (ex: <link rel="preload">) et de déclencher des requêtes
+    const safeHtmlText = htmlText
+      .replace(/<link\b[^>]*>/gi, '') // Supprime les liens (stylesheets, preloads)
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '') // Supprime les scripts
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ''); // Supprime les styles
+
     const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
+    const doc = parser.parseFromString(safeHtmlText, 'text/html');
 
     // Récupérations des Stats (si présentes)
     const stats = [];
@@ -193,7 +223,9 @@ class AO3Service {
       console.error("[Stealth Reader] HTML reçu:", htmlText.substring(0, 300));
       throw new Error("Impossible d'isoler le contenu de l'histoire. URL invalide, bloquée par AO3 ou erreur inattendue.");
     }
-
+    // Nettoyage des scripts et éléments non désirés pour éviter les erreurs CSP et de sécurité
+    const scriptsAndStyles = storyContainer.querySelectorAll('script, style, iframe, link, object, embed');
+    scriptsAndStyles.forEach(el => el.remove());
     // Amélioration de l'affichage / Discrétion
     // On garde la classe .chapter.preface car elle contient souvent le titre et les notes du chapitre.
     const elementsToRemove = storyContainer.querySelectorAll('.landmark');
@@ -273,8 +305,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  document.getElementById('prevBtn').addEventListener('click', function() { navigateTo(this.dataset.url); });
-  document.getElementById('nextBtn').addEventListener('click', function() { navigateTo(this.dataset.url); });
+  const bindNavBtn = (id) => {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', function() { navigateTo(this.dataset.url); });
+  };
+
+  bindNavBtn('prevBtnTop');
+  bindNavBtn('nextBtnTop');
+  bindNavBtn('prevBtnBottom');
+  bindNavBtn('nextBtnBottom');
 
   // Sauvegarde automatique et fluide du défilement
   let scrollTimeout;
