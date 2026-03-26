@@ -8,21 +8,51 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div id="controls">
-    <input type="text" id="urlInput" placeholder="URL AO3...">
-    <button id="loadBtn">Charger</button>
+  <div id="topbar">
+    <div id="tabs" style="display: flex; align-items: center; gap: 10px;">
+      <button class="tab-btn active" data-target="manual-mode">URL</button>
+      <button class="tab-btn" data-target="auto-mode">Historique</button>
+      <p id="user-greeting" style="display: none; margin: 0; font-size: 0.9em; font-weight: bold; color: var(--status-color);">Hey <span id="topbar-pseudo-name"></span> !</p>
+    </div>
     <button id="themeToggle" title="Mode clair / sombre">🌓</button>
   </div>
-  <div id="metadata" class="meta-info"></div>
-  <div id="chapterNavTop" class="chapter-nav">
-    <button id="prevBtnTop" style="display: none;">← Chapitre Précédent</button>
-    <button id="nextBtnTop" style="display: none;">Chapitre Suivant →</button>
+
+  <div id="manual-mode" class="tab-content active">
+    <div id="controls">
+      <input type="text" id="urlInput" placeholder="URL AO3...">
+      <button id="loadBtn">Charger</button>
+    </div>
   </div>
-  <div id="content"></div>
-  <div id="chapterNavBottom" class="chapter-nav">
-    <button id="prevBtnBottom" style="display: none;">← Chapitre Précédent</button>
-    <button id="nextBtnBottom" style="display: none;">Chapitre Suivant →</button>
+
+  <div id="auto-mode" class="tab-content">
+    <div id="auto-loading" class="status-msg" style="display: none;">Connexion à votre compte en cours...</div>
+    
+    <div id="auto-confirm" style="display: none; text-align: center; margin-top: 20px;">
+      <p style="margin-bottom: 10px;">Êtes-vous bien <strong><span id="auto-pseudo-name"></span></strong> ?</p>
+      <label style="display: block; margin-bottom: 20px; cursor: pointer; color: var(--status-color);">
+        <input type="checkbox" id="confirm-pseudo-checkbox"> Oui, c'est moi !
+      </label>
+      <button id="fetch-history-btn" disabled style="padding: 5px 15px; font-family: inherit; background: var(--btn-bg); color: var(--text-color); border: 1px solid var(--border-color); cursor: pointer;">
+        Charger mon historique
+      </button>
+    </div>
+
+    <ul id="reading-list"></ul>
   </div>
+
+  <div id="reader-view">
+    <div id="metadata" class="meta-info"></div>
+    <div id="chapterNavTop" class="chapter-nav">
+      <button id="prevBtnTop" style="display: none;">← Precedent</button>
+      <button id="nextBtnTop" style="display: none;">Suivant →</button>
+    </div>
+    <div id="content"></div>
+    <div id="chapterNavBottom" class="chapter-nav">
+      <button id="prevBtnBottom" style="display: none;">← Precedent</button>
+      <button id="nextBtnBottom" style="display: none;">Suivant →</button>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
