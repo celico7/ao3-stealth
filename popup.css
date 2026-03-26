@@ -25,32 +25,88 @@ body.dark-theme {
 }
 
 html {
-  overflow-y: scroll !important; /* Force l'affichage de la scrollbar principale au niveau de HTML */
-  height: 100%;
+  overflow: hidden; /* Empêche tout scroll global non voulu */
 }
 
 body {
-  /* On autorise une extension de la popup avec min/max, max size dans Chrome Extensions c'est ~800x600 */
-  min-width: 400px;
-  width: 100%;
-  max-width: 800px;
-  min-height: 400px;
-  height: 100vh;
-  max-height: 600px;
+  width: 400px;
+  height: 400px; 
+  max-height: 400px;
   margin: 0;
   padding: 10px;
   box-sizing: border-box;
   font-family: 'Roboto', sans-serif, monospace;
   background-color: var(--bg-color);
   color: var(--text-color);
-  overflow-y: scroll; /* Force l'affichage permanent pour éviter qu'elle saute au chargement */
+  overflow: hidden; 
+  display: flex;
+  flex-direction: column;
+}
+/* Tabs & Header */
+#topbar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  border-bottom: 1px dashed var(--border-color);
+  padding-bottom: 10px;
+}
+#tabs {
+  display: flex;
+  gap: 5px;
+}
+.tab-btn, #themeToggle {
+  padding: 5px 10px;
+  font-family: inherit;
+  background: var(--btn-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+}
+.tab-btn:hover, #themeToggle:hover {
+  background: var(--btn-hover);
+}
+.tab-btn.active {
+  background: var(--text-color);
+  color: var(--bg-color);
+  font-weight: bold;
+}
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+
+/* Reading List */
+#reading-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+#reading-list li {
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  margin-bottom: 8px;
+  cursor: pointer;
+  background: var(--input-bg);
+}
+#reading-list li:hover {
+  background: var(--btn-hover);
+}
+.fic-title {
+  font-weight: bold;
+  font-size: 14px;
+  display: block;
+  margin-bottom: 4px;
+}
+.fic-meta {
+  font-size: 11px;
+  color: var(--status-color);
 }
 
 #controls {
   display: flex;
-  margin-bottom: 15px;
-  border-bottom: 1px dashed var(--border-color);
-  padding-bottom: 10px;
+  margin-bottom: 10px;
 }
 
 #urlInput {
@@ -62,7 +118,7 @@ body {
   color: var(--text-color);
 }
 
-#loadBtn, #themeToggle {
+#loadBtn {
   padding: 5px 10px;
   margin-left: 5px;
   font-family: inherit;
@@ -72,7 +128,7 @@ body {
   cursor: pointer;
 }
 
-#loadBtn:hover, #themeToggle:hover {
+#loadBtn:hover {
   background: var(--btn-hover);
 }
 
@@ -142,4 +198,43 @@ body {
 a {
   color: var(--text-color);
   text-decoration: underline;
+}
+
+#reader-view, #auto-mode {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 5px;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--status-color);
+}
+
+/* Styles pour les tags injectes depuis AO3 */
+.stealth-tags-widget { margin-top: 10px; margin-bottom: 20px; }
+.stealth-tags-widget .tags-content dl { margin: 0; padding: 0; }
+.stealth-tags-widget .tags-content dt { font-weight: bold; margin-top: 5px; color: var(--text-color); font-size: 13px; }
+.stealth-tags-widget .tags-content dd { margin: 0 0 5px 0; padding: 0; }
+.stealth-tags-widget .tags-content ul { list-style: none; padding: 0; margin: 0; display: inline; }
+.stealth-tags-widget .tags-content ul li { display: inline; margin-right: 5px; }
+.stealth-tags-widget .tags-content ul li::after { content: ','; }
+.stealth-tags-widget .tags-content ul li:last-child::after { content: ''; }
+.stealth-tags-widget .tags-content a.tag {
+    color: var(--text-color);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--border-color);
+    transition: all 0.2s;
+}
+.stealth-tags-widget .tags-content a.tag:hover {
+    background-color: var(--btn-hover);
 }

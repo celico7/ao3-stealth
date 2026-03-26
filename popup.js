@@ -11,7 +11,12 @@ const CONFIG = {
     prevBtnTop: '#prevBtnTop',
     nextBtnTop: '#nextBtnTop',
     prevBtnBottom: '#prevBtnBottom',
-    nextBtnBottom: '#nextBtnBottom'
+    nextBtnBottom: '#nextBtnBottom',
+    readerView: '#reader-view',
+    tabBtns: '.tab-btn',
+    tabContents: '.tab-content',
+    autoList: '#reading-list',
+    autoLoading: '#auto-loading'
   },
   storageKeyUrl: 'ao3_last_url',
   storageKeyHtml: 'ao3_last_html',
@@ -30,11 +35,129 @@ class UIManager {
     this.content = document.querySelector(CONFIG.selectors.content);
     this.themeToggle = document.querySelector(CONFIG.selectors.themeToggle);
     this.metadata = document.querySelector(CONFIG.selectors.metadata);
+    this.readerView = document.querySelector(CONFIG.selectors.readerView);
     
     this.prevBtns = [document.querySelector(CONFIG.selectors.prevBtnTop), document.querySelector(CONFIG.selectors.prevBtnBottom)].filter(Boolean);
     this.nextBtns = [document.querySelector(CONFIG.selectors.nextBtnTop), document.querySelector(CONFIG.selectors.nextBtnBottom)].filter(Boolean);
     
+    this.tabBtns = document.querySelectorAll(CONFIG.selectors.tabBtns);
+    this.tabContents = document.querySelectorAll(CONFIG.selectors.tabContents);
+    this.autoList = document.querySelector(CONFIG.selectors.autoList);
+    this.autoLoading = document.querySelector(CONFIG.selectors.autoLoading);
+    
+    this.autoConfirm = document.querySelector('#auto-confirm');
+    this.autoPseudoName = document.querySelector('#auto-pseudo-name');
+    this.confirmCheckbox = document.querySelector('#confirm-pseudo-checkbox');
+    this.fetchHistoryBtn = document.querySelector('#fetch-history-btn');
+    this.currentPseudo = '';
+
     this.initTheme();
+    this.initTabs();
+    this.initUserGreeting();
+  }
+
+  async initUserGreeting() {
+    this.userGreeting = document.querySelector('#user-greeting');
+    this.topbarPseudoName = document.querySelector('#topbar-pseudo-name');
+    try {
+      const pseudo = await AO3Service.fetchUserPseudo();
+      if (pseudo && this.userGreeting && this.topbarPseudoName) {
+        this.topbarPseudoName.textContent = pseudo;
+        this.userGreeting.style.display = 'block';
+      }
+    } catch (e) {
+      // Ignorer silencieusement si l'utilisateur n'est pas connecté
+    }
+  }
+
+  initTabs() {
+    this.tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.switchTab(btn.dataset.target);
+      });
+    });
+
+    this.confirmCheckbox.addEventListener('change', (e) => {
+      this.fetchHistoryBtn.disabled = !e.target.checked;
+    });
+
+    this.fetchHistoryBtn.addEventListener('click', () => {
+      this.runHistoryFetch();
+    });
+  }
+
+  switchTab(targetId) {
+    this.tabBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.target === targetId);
+    });
+    this.tabContents.forEach(content => {
+      content.classList.toggle('active', content.id === targetId);
+    });
+
+    if (targetId === 'auto-mode') {
+      this.readerView.style.display = 'none';
+      if (this.autoList.innerHTML === '') {
+        this.loadAutoHistory();
+      }
+    } else {
+      if (this.content.innerHTML !== '') {
+        this.readerView.style.display = 'block';
+      }
+    }
+  }
+
+  async loadAutoHistory() {
+    this.autoLoading.style.display = 'block';
+    this.autoLoading.textContent = "Recherche de l'utilisateur connecté...";
+    this.autoList.innerHTML = '';
+    this.autoConfirm.style.display = 'none';
+
+    try {
+      const pseudo = await AO3Service.fetchUserPseudo();
+      this.currentPseudo = pseudo;
+      
+      this.autoLoading.style.display = 'none';
+      this.autoConfirm.style.display = 'block';
+      this.autoPseudoNameElements.forEach(el => el.textContent = pseudo);
+      this.confirmCheckbox.checked = false;
+      this.fetchHistoryBtn.disabled = true;
+
+    } catch (error) {
+      this.autoLoading.textContent = error.message;
+    }
+  }
+
+  async runHistoryFetch() {
+    this.autoConfirm.style.display = 'none';
+    this.autoLoading.style.display = 'block';
+    this.autoLoading.textContent = `Récupération de l'historique de ${this.currentPseudo}...`;
+
+    try {
+      const readings = await AO3Service.fetchRecentReadings(this.currentPseudo);
+      this.autoLoading.style.display = 'none';
+
+      if (readings.length === 0) {
+        this.autoList.innerHTML = '<li style="text-align:center;">Aucun historique récent trouvé.</li>';
+        return;
+      }
+
+      readings.forEach(fic => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span class="fic-title">${fic.title}</span>
+          <span class="fic-meta">Auteur: ${fic.author} | Fandom: ${fic.fandom}</span>
+        `;
+        li.addEventListener('click', () => {
+          this.inputValue = fic.url;
+          this.switchTab('manual-mode');
+          this.button.click(); // Simule le chargement
+        });
+        this.autoList.appendChild(li);
+      });
+
+    } catch (error) {
+      this.autoLoading.textContent = error.message;
+    }
   }
 
   initTheme() {
@@ -48,8 +171,7 @@ class UIManager {
     });
   }
 
-  showLoading() {
-    this.content.innerHTML = '<p class="status-msg">⏳ Chargement de l\'histoire en cours...</p>';
+  showLoading() {    this.readerView.style.display = 'block';    this.content.innerHTML = '<p class="status-msg">⏳ Chargement de l\'histoire en cours...</p>';
     this.metadata.innerHTML = '';
     
     this.prevBtns.forEach(btn => btn.style.display = 'none');
@@ -66,8 +188,8 @@ class UIManager {
   displayContent(data) {
     let htmlContent = typeof data === 'string' ? data : data.html;
     
-    // Nettoyage de sécurité : on retire script, style, iframe, link
-    htmlContent = htmlContent.replace(/<(script|style|iframe|link)\b[^>]*>([\s\S]*?<\/\1>)?/gi, '');
+    // Nettoyage de sécurité : on retire script, iframe, link
+    htmlContent = htmlContent.replace(/<(script|iframe|link)\b[^>]*>([\s\S]*?<\/\1>)?/gi, '');
 
     this.content.innerHTML = htmlContent;
 
@@ -119,6 +241,78 @@ class AO3Service {
     return url.toString();
   }
 
+  static async getCookieString() {
+    return new Promise((resolve) => {
+      chrome.cookies.getAll({ domain: CONFIG.domain }, (cookies) => {
+        resolve(cookies.map(c => `${c.name}=${c.value}`).join('; '));
+      });
+    });
+  }
+
+  static async fetchSecure(url) {
+    const cookieString = await this.getCookieString();
+    return fetch(url, {
+      headers: {
+        'Cookie': cookieString,
+        'User-Agent': navigator.userAgent
+      }
+    });
+  }
+
+  static async fetchUserPseudo() {
+    const response = await this.fetchSecure('https://archiveofourown.org/');
+    if (!response.ok) throw new Error("Impossible d'accéder à AO3.");
+    
+    const htmlText = await response.text();
+    const cleanHtml = htmlText
+      .replace(/<head[\s\S]*?<\/head>/gi, '<head></head>')
+      .replace(/<(script|style|iframe|link)\b[^>]*>([\s\S]*?<\/\1>)?/gi, '');
+      
+    const doc = document.implementation.createHTMLDocument('');
+    doc.documentElement.innerHTML = cleanHtml;
+    
+    // Le menu utilisateur AO3 a un lien vers le profil (ex:href="/users/MonPseudo")
+    const profileLink = doc.querySelector('#greeting a[href^="/users/"]');
+    if (!profileLink) {
+      throw new Error("Vous n'êtes pas connecté à AO3. Connectez-vous sur votre navigateur en cochant \"Remember Me\". Cette extension utilise votre cookie de connexion du navigateur, !elle n'est pas mémorisé par l'extension elle-même, cette pratique est 100% safe!.");
+    }
+    
+    const href = profileLink.getAttribute('href'); 
+    const pseudo = href.split('/')[2];
+    return pseudo;
+  }
+
+  static async fetchRecentReadings(pseudo) {
+    const response = await this.fetchSecure(`https://archiveofourown.org/users/${pseudo}/readings`);
+    if (!response.ok) throw new Error("Impossible d'accéder à l'historique de lecture.");
+    
+    const htmlText = await response.text();
+    const cleanHtml = htmlText
+      .replace(/<head[\s\S]*?<\/head>/gi, '<head></head>')
+      .replace(/<(script|style|iframe|link)\b[^>]*>([\s\S]*?<\/\1>)?/gi, '');
+      
+    const doc = document.implementation.createHTMLDocument('');
+    doc.documentElement.innerHTML = cleanHtml;
+    
+    // Parser les 3 à 5 dernières lectures
+    const worksNodes = Array.from(doc.querySelectorAll('li.work.blurb.group')).slice(0, 5);
+    
+    const readingList = worksNodes.map(work => {
+      const titleLink = work.querySelector('h4.heading a:first-child');
+      const authorLink = work.querySelector('h4.heading a[rel="author"]');
+      const fandomLink = work.querySelector('h5.fandoms a');
+
+      return {
+        title: titleLink ? titleLink.textContent.trim() : 'Inconnu',
+        url: titleLink ? `https://archiveofourown.org${titleLink.getAttribute('href')}` : null,
+        author: authorLink ? authorLink.textContent.trim() : 'Anonyme',
+        fandom: fandomLink ? fandomLink.textContent.trim() : ''
+      };
+    }).filter(work => work.url); // Exclut les fictions lockées/supprimées sans url
+
+    return readingList;
+  }
+
   /**
    * Récupère et extrait le contenu de l'histoire.
    */
@@ -128,24 +322,7 @@ class AO3Service {
     }
 
     const fetchedUrl = this.prepareURL(rawUrl);
-
-    // 1. Récupération explicite des cookies de session AO3 de l'utilisateur
-    // Contourne les blocages de sécurité "SameSite" et "Cross-Origin" de Chrome 
-    // qui empêchent souvent `credentials: 'include'` de fonctionner correctement en Manifest V3.
-    const cookieString = await new Promise((resolve) => {
-      chrome.cookies.getAll({ domain: CONFIG.domain }, (cookies) => {
-        resolve(cookies.map(c => `${c.name}=${c.value}`).join('; '));
-      });
-    });
-
-    // 2. Fetch de la page en injectant les cookies en dur dans les en-têtes
-    const response = await fetch(fetchedUrl, {
-      method: 'GET',
-      headers: {
-        'Cookie': cookieString, // Injection manuelle
-        'User-Agent': navigator.userAgent // Garder un footprint naturel
-      }
-    });
+    const response = await this.fetchSecure(fetchedUrl);
 
     if (!response.ok) {
         throw new Error(`Échec de la connexion au serveur (Statut HTTP : ${response.status}).`);
@@ -161,19 +338,45 @@ class AO3Service {
   static parseHTML(htmlText) {
     const cleanHtml = htmlText
       .replace(/<head[\s\S]*?<\/head>/gi, '<head></head>')
-      .replace(/<(script|style|iframe|link)\b[^>]*>([\s\S]*?<\/\1>)?/gi, '');
+        .replace(/<(script|iframe|link)\b[^>]*>([\s\S]*?<\/\1>)?/gi, ''); 
 
-    const doc = document.implementation.createHTMLDocument('');
-    doc.documentElement.innerHTML = cleanHtml;
-
-    // Stats
-    const stats = [];
-    const selectedOption = doc.querySelector('#selected_id option[selected="selected"]');
-    if (selectedOption) {
-      stats.push(selectedOption.textContent);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(cleanHtml, 'text/html');
+      // --- Extractions principales (Titre, Auteur) ---
+      const headingTitleNode = doc.querySelector('h2.title.heading');
+      const headingAuthorNodes = doc.querySelectorAll('h3.byline.heading a[rel="author"]');
+    // Fallback: sur certaines pages ça peut être juste 'h2.title'
+    let ficTitleStr = '';
+    if (headingTitleNode) {
+      ficTitleStr = headingTitleNode.textContent.trim();
     } else {
       const workTitle = doc.querySelector('h2.title');
-      if (workTitle) stats.push(workTitle.textContent.trim());
+      if (workTitle) ficTitleStr = workTitle.textContent.trim();
+    }
+
+    let authorStr = '';
+    if (headingAuthorNodes && headingAuthorNodes.length > 0) {
+      authorStr = Array.from(headingAuthorNodes).map(a => a.textContent.trim()).join(', ');
+    } else {
+      // Autre structure AO3 possible pour les auteurs (page profil, bookmarks, etc)
+      const ddAuthors = doc.querySelectorAll('dd.authors a[rel="author"]');
+      if (ddAuthors && ddAuthors.length > 0) {
+        authorStr = Array.from(ddAuthors).map(a => a.textContent.trim()).join(', ');
+      }
+    }
+
+    // Reconstruction du Titre principal "Titre by Auteur"
+    const headerTitle = (ficTitleStr && authorStr) ? 
+        `${ficTitleStr} par ${authorStr}` : 
+        (ficTitleStr || 'Fiction en cours');
+        
+    // Stats second ligne
+    const stats = [];
+    stats.push(`<strong>${headerTitle}</strong><br/>`);
+
+    const selectedOption = doc.querySelector('#selected_id option[selected="selected"]');
+    if (selectedOption) {
+      stats.push(`<strong>${selectedOption.textContent}</strong>`);
     }
 
     const { words, chapters, kudos } = {
@@ -197,9 +400,27 @@ class AO3Service {
 
     storyContainer.querySelectorAll('object, embed, .landmark').forEach(el => el.remove());
 
+    // --- Extractions des tags ---
+    let tagsHTML = '';
+    const dlWorkMetaGroup = doc.querySelector('dl.work.meta.group');
+    if (dlWorkMetaGroup) {
+      // Enlever les stats du bloc tags pour éviter les doublons
+      dlWorkMetaGroup.querySelectorAll('.stats').forEach(el => el.remove());
+
+      tagsHTML = `
+        <details class="stealth-tags-widget" style="margin-top: 5px;">
+          <summary style="cursor: pointer; font-size: 0.9em; font-weight: bold; color: var(--status-color);">Voir tags >></summary>
+          <div class="tags-content">
+              ${dlWorkMetaGroup.innerHTML}
+            </dl>
+          </div>
+        </details>
+      `;
+    }
+
     return {
-      html: storyContainer.innerHTML,
-      stats: stats.join(' | '),
+      html: tagsHTML + storyContainer.innerHTML,
+      stats: stats[0] + stats.slice(1).join(' | '),
       nextUrl: getUrl('.chapter.next a'),
       prevUrl: getUrl('.chapter.previous a')
     };
@@ -231,7 +452,14 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.displayContent(result[CONFIG.storageKeyHtml]);
 
       if (result[CONFIG.storageKeyScroll]) {
-        setTimeout(() => window.scrollTo({ top: result[CONFIG.storageKeyScroll], behavior: 'instant' }), 100);
+        // Tente de scroller plusieurs fois le temps que le popup et le DOM s'ajustent
+        let attempts = 0;
+        const readerView = document.querySelector('#reader-view');
+        const tryScroll = () => {
+          if (readerView) readerView.scrollTo({ top: result[CONFIG.storageKeyScroll], behavior: 'instant' });
+          if (++attempts < 5) setTimeout(tryScroll, 100);
+        };
+        tryScroll();
       }
     }
   });
@@ -246,10 +474,11 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const storyData = await AO3Service.fetchStory(url);
       ui.displayContent(storyData);
-      
-      window.scrollTo({ top: 0, behavior: 'instant' });
-      
-      chrome.storage.local.set({ 
+
+      const readerView = document.querySelector('#reader-view');
+      if (readerView) readerView.scrollTo({ top: 0, behavior: 'instant' });
+
+      chrome.storage.local.set({
         [CONFIG.storageKeyUrl]: url,
         [CONFIG.storageKeyHtml]: storyData,
         [CONFIG.storageKeyScroll]: 0
@@ -275,10 +504,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Sauvegarde automatique du défilement
   let scrollTimeout;
-  document.addEventListener('scroll', () => {
-    clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => {
-      chrome.storage.local.set({ [CONFIG.storageKeyScroll]: window.scrollY || document.documentElement.scrollTop });
-    }, 200);
-  }, true); 
+  let isRestoring = true; // Empêche l'écrasement de la sauvegarde lors de l'ouverture
+
+  setTimeout(() => isRestoring = false, 500); // Laisse le temps au popup de s'afficher
+
+  const readerView = document.querySelector('#reader-view');
+  if (readerView) {
+    readerView.addEventListener('scroll', () => {
+      if (isRestoring) return;
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        chrome.storage.local.set({ [CONFIG.storageKeyScroll]: readerView.scrollTop });
+      }, 200);
+    });
+  }
 });
