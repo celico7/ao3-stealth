@@ -118,7 +118,7 @@ class UIManager {
       
       this.autoLoading.style.display = 'none';
       this.autoConfirm.style.display = 'block';
-      this.autoPseudoNameElements.forEach(el => el.textContent = pseudo);
+      this.autoPseudoName.textContent = pseudo;
       this.confirmCheckbox.checked = false;
       this.fetchHistoryBtn.disabled = true;
 
@@ -412,7 +412,6 @@ class AO3Service {
           <summary style="cursor: pointer; font-size: 0.9em; font-weight: bold; color: var(--status-color);">Voir tags >></summary>
           <div class="tags-content">
               ${dlWorkMetaGroup.innerHTML}
-            </dl>
           </div>
         </details>
       `;
